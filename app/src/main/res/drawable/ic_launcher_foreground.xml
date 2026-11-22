@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Hoja de texto -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,28h32a4,4 0,0 1,4 4v44a4,4 0,0 1,-4 4h-32a4,4 0,0 1,-4 -4v-44a4,4 0,0 1,4 -4z" />
+    <!-- Líneas resaltadas con los colores de las categorías -->
+    <path
+        android:fillColor="#FF7A59"
+        android:pathData="M37,37h18a2,2 0,0 1,2 2v0a2,2 0,0 1,-2 2h-18a2,2 0,0 1,-2 -2v0a2,2 0,0 1,2 -2z" />
+    <path
+        android:fillColor="#19B58A"
+        android:pathData="M37,48h26a2,2 0,0 1,2 2v0a2,2 0,0 1,-2 2h-26a2,2 0,0 1,-2 -2v0a2,2 0,0 1,2 -2z" />
+    <path
+        android:fillColor="#F2B01E"
+        android:pathData="M37,59h14a2,2 0,0 1,2 2v0a2,2 0,0 1,-2 2h-14a2,2 0,0 1,-2 -2v0a2,2 0,0 1,2 -2z" />
+    <path
+        android:fillColor="#8E5CF0"
+        android:pathData="M37,68h22a2,2 0,0 1,2 2v0a2,2 0,0 1,-2 2h-22a2,2 0,0 1,-2 -2v0a2,2 0,0 1,2 -2z" />
+</vector>
