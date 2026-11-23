@@ -15,6 +15,7 @@ object Analyzer {
         val lang = if (requested == Lang.AUTO) detect(tokens) else requested
         val tagger: Tagger = if (lang == Lang.EN) EnglishTagger else SpanishTagger
         tagger.tag(tokens)
+        markLocutions(tokens)
 
         val groups = HashMap<Category, LinkedHashMap<String, Agg>>()
         for (c in listOf(Category.NOUN, Category.ADJ, Category.VERB, Category.ADV)) {
@@ -32,11 +33,11 @@ object Analyzer {
                 Pos.ADV -> Category.ADV
                 else -> null
             } ?: continue
-            if (t.lower.length < 2) continue
+            if (t.lower.length < 2 || t.aux) continue
             spans.add(Span(t.start, t.end, cat))
 
             val map = groups.getValue(cat)
-            val key = if (cat == Category.VERB) t.lemma else t.lower
+            val key = if (cat == Category.VERB || cat == Category.ADJ) t.lemma else t.lower
             val display = if (t.proper && !t.acronym) t.text else if (t.acronym) t.text else key
             val agg = map.getOrPut(key) { Agg(display, cat) }
             agg.count += 1
@@ -63,6 +64,37 @@ object Analyzer {
         spans.sortBy { it.start }
 
         return Analysis(lang, text, entries, spans, tokens.size, distinct.size)
+    }
+
+    // ------------------------------------------------------------------ locuciones fijas
+
+    private val locutions: List<List<String>> = listOf(
+        "a partir de", "en cambio", "sin embargo", "por ejemplo", "es decir", "a través de", "por lo tanto",
+        "con respecto a", "en función de", "debido a", "gracias a", "a pesar de", "de acuerdo con",
+        "con base en", "por lo general", "en general", "en particular", "sobre todo", "a veces", "por tanto",
+        "en cuanto a", "así como", "tal vez", "por supuesto", "de hecho", "en efecto", "al menos",
+        "por lo menos", "a menudo", "de nuevo", "por fin", "de repente", "a lo largo de", "por medio de",
+        "en lugar de", "en vez de", "por favor", "a causa de", "en torno a", "con el fin de", "por eso",
+        "for example", "such as", "in order to", "as well as", "in addition", "in particular", "as a result",
+        "due to", "according to", "in fact", "of course", "at least", "for instance", "in general"
+    ).map { it.split(' ') }
+
+    private fun markLocutions(tokens: List<Token>) {
+        val n = tokens.size
+        for (i in 0 until n) {
+            for (loc in locutions) {
+                if (i + loc.size > n) continue
+                var ok = true
+                for (k in loc.indices) {
+                    val t = tokens[i + k]
+                    if (t.lower != loc[k] || (k > 0 && t.sentenceStart) || (k > 0 && t.gap.any { it != ' ' })) {
+                        ok = false
+                        break
+                    }
+                }
+                if (ok) for (k in loc.indices) tokens[i + k].pos = Pos.FUNC
+            }
+        }
     }
 
     // ------------------------------------------------------------------ tokenización
@@ -100,6 +132,7 @@ object Analyzer {
             val start = m.range.first + (m.value.length - m.value.trimStart('-', '\'', '’').length)
             val end = start + raw.length
             val tok = Token(raw, start, end, sentenceStart)
+            tok.gap = gap
             if (!sentenceStart) {
                 midCount++
                 if (raw[0].isUpperCase()) capMid++

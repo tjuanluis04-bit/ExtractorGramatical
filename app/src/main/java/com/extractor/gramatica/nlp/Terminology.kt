@@ -1,51 +1,126 @@
 package com.extractor.gramatica.nlp
 
-/** Extrae terminología: sintagmas nominales técnicos, siglas, nombres propios y palabras especializadas. */
+/**
+ * Extrae terminología: sintagmas nominales técnicos (sustantivo + adjetivo, sustantivo + "de" + sustantivo),
+ * siglas, marcas/nombres con mayúsculas internas y palabras de origen científico o extranjero.
+ */
 object Terminology {
 
-    private val technicalSuffixes = listOf(
-        "logía", "ología", "grafía", "metría", "scopía", "patía", "terapia", "cracia", "ismo", "itis",
-        "osis", "ónico", "ónica", "ático", "ática", "ítico", "ítica", "ización", "izar", "ology",
-        "graphy", "metry", "ization", "ometer"
+    private fun ws(s: String): HashSet<String> = s.split(' ').filter { it.isNotBlank() }.toHashSet()
+
+    /** Sustantivos demasiado genéricos para ser términos (se descartan al inicio de una frase). */
+    private val generic: HashSet<String> = HashSet<String>().apply {
+        addAll(SpanishVocab.genericNouns)
+        addAll(
+            ws(
+                "rama ramas investigador investigadores científico científicos autor autores experto " +
+                    "expertos persona personas parte partes tipo tipos clase clases serie conjunto " +
+                    "volumen volúmenes cantidad cantidades número resto mayoría minoría ejemplo " +
+                    "forma formas manera maneras proceso procesos tasa nivel niveles fase etapa " +
+                    "thing things way ways lot lots kind kinds type types part parts number case cases " +
+                    "point points time times year years people group groups set sets series piece " +
+                    "researcher researchers author authors expert experts person persons"
+            )
+        )
+    }
+
+    /** Adjetivos demasiado generales para formar un término. */
+    private val weakAdjectives: HashSet<String> = ws(
+        "grande grandes gran nuevo nueva nuevos nuevas mejor mejores mayor mayores menor menores mismo " +
+            "misma mismos mismas otro otra otros otras buen bueno buena buenos buenas mal malo mala " +
+            "importante importantes principal principales diferente diferentes distinto distinta " +
+            "distintos distintas posible posibles necesario necesaria necesarios necesarias general " +
+            "generales diverso diversa diversos diversas varios varias numeroso numerosa numerosos " +
+            "numerosas último última últimos últimas primero primera primeros primeras siguiente " +
+            "siguientes anterior anteriores actual actuales propio propia propios propias cierto " +
+            "cierta ciertos ciertas mucho mucha muchos muchas poco poca pocos pocas simple simples " +
+            "sencillo sencilla fácil fáciles difícil difíciles rápido rápida lento lenta bajo baja " +
+            "alto alta largo larga corto corta pequeño pequeña pequeños pequeñas completo completa " +
+            "presente presentes total real reales ambos ambas todo toda todos todas cada demás tal tales " +
+            "new old big small large little long short high low good bad best better main major minor " +
+            "different possible same other many few several various certain whole simple easy hard"
     )
 
-    private val linkWords = hashSetOf("de", "del", "of")
-    private val linkDeterminers = hashSetOf("la", "el", "los", "las", "un", "una", "the")
+    /** Sustantivos que suelen encabezar términos técnicos ("base de datos", "red neuronal"). */
+    private val termHeads: HashSet<String> = ws(
+        "base red sistema modelo lenguaje aprendizaje análisis algoritmo teoría ley método función " +
+            "ecuación inteligencia energía célula células proteína enzima ácido molécula átomo reacción " +
+            "ciclo campo fuerza onda señal circuito procesador memoria servidor protocolo interfaz " +
+            "arquitectura framework red sistema clima ecosistema especie población gen genoma virus " +
+            "bacteria tejido órgano sistema enfermedad síndrome tratamiento diagnóstico derecho contrato " +
+            "norma sentencia delito mercado inflación interés capital inversión " +
+            "network system model language learning analysis algorithm theory law method function " +
+            "equation intelligence energy cell protein enzyme acid molecule atom reaction cycle field " +
+            "force wave signal circuit processor memory server protocol interface architecture"
+    )
 
-    private class Candidate(
+    private val links = ws("de del of")
+    private val dets = ws("la el los las un una the")
+
+    private val sciencePrefixes = listOf(
+        "bio", "geo", "hidro", "termo", "micro", "macro", "neuro", "psico", "foto", "electro", "eléctro",
+        "nano", "cardio", "fisio", "cito", "cloro", "mito", "quimio", "astro", "aero", "ciber", "gastro",
+        "hemo", "osteo", "dermo", "endo", "exo", "hiper", "hipo", "algorit", "cripto", "crypto", "cyber",
+        "hydro", "thermo", "photo", "genom", "proteo", "metabol"
+    )
+    private val scienceSuffixes = listOf(
+        "logía", "ología", "grafía", "metría", "scopía", "patía", "terapia", "cracia", "itis", "osis",
+        "ology", "ography", "metry", "plasma", "ización", "ization", "ómetro", "ometer"
+    )
+    private val foreignEndings = listOf("ware", "ing", "work", "chain", "base", "net")
+
+    private class Cand(
         val key: String,
         val display: String,
         val start: Int,
         val end: Int,
         val words: Int,
-        val technical: Int,
-        val proper: Boolean
+        val tech: Int,
+        val proper: Boolean,
+        val single: Boolean,
+        val plausible: Boolean = false
     )
 
-    private fun technicalness(t: Token): Int {
+    private fun isGeneric(t: Token): Boolean = generic.contains(t.lower)
+
+    /** Pista de que una palabra suelta es un término (origen científico o extranjero). */
+    private fun techSingle(t: Token): Int {
+        val w = t.lower
         var score = 0
+        if (w.any { it.isDigit() }) score++
+        if (w.length >= 8) {
+            if (sciencePrefixes.any { w.startsWith(it) }) score++
+            else if (scienceSuffixes.any { w.endsWith(it) && w.length >= it.length + 3 }) score++
+            else if (w.endsWith("sis") && w.length >= 9) score++
+        }
+        if (w.length >= 4 && (w.contains('w') || w.contains('k'))) score++
+        else if (w.length >= 7 && foreignEndings.any { w.endsWith(it) }) score++
+        else if (w.length >= 5 && (w.contains("ph") || w.contains("th") || w.contains("ck") || w.contains("sh"))) score++
+        return score
+    }
+
+    /** Pista de que un sustantivo o adjetivo dentro de una frase es técnico. */
+    private fun techInPhrase(t: Token): Int {
+        var score = techSingle(t)
         val w = t.lower
         if (t.acronym) score += 2
-        if (w.length >= 11) score += 1
-        for (s in technicalSuffixes) {
-            if (w.length >= s.length + 4 && w.endsWith(s)) {
-                score += 1
-                break
-            }
-        }
-        if (w.length >= 10 &&
-            (w.endsWith("ción") || w.endsWith("miento") || w.endsWith("idad") || w.endsWith("tion") ||
-                w.endsWith("ment") || w.endsWith("ity"))
+        if (w.length >= 6 && (w.endsWith("ico") || w.endsWith("ica") || w.endsWith("icos") || w.endsWith("icas") ||
+                w.endsWith("ivo") || w.endsWith("iva") || w.endsWith("ivos") || w.endsWith("ivas") ||
+                w.endsWith("ial") || w.endsWith("iales") || w.endsWith("ical"))
         ) {
-            score += 1
+            score++
         }
-        if (w.length >= 8 && (w.endsWith("ico") || w.endsWith("ica") || w.endsWith("icos") ||
-                w.endsWith("icas") || w.endsWith("ical") || w.endsWith("ivo") || w.endsWith("iva"))
-        ) {
-            score += 1
-        }
-        if (w.any { it.isDigit() }) score += 1
         return score
+    }
+
+    private fun mixedCase(w: String): Boolean {
+        if (w.length < 3) return false
+        var i = 1
+        while (i < w.length) {
+            if (w[i].isUpperCase()) return true
+            i++
+        }
+        return false
     }
 
     /** Dos tokens están "pegados" si solo hay espacios entre ellos (sin comas, puntos, etc.). */
@@ -57,48 +132,69 @@ object Terminology {
         return true
     }
 
-    private fun isContent(t: Token): Boolean = t.pos == Pos.NOUN || t.pos == Pos.ADJ
-
     fun extract(text: String, tokens: List<Token>): Pair<List<Entry>, List<Span>> {
-        val candidates = ArrayList<Candidate>()
-        var i = 0
+        val cands = ArrayList<Cand>()
         val n = tokens.size
+        var i = 0
         while (i < n) {
             val first = tokens[i]
             if (first.pos != Pos.NOUN) {
-                // Un adjetivo técnico suelto también puede ser término; se trata más abajo.
                 i++
                 continue
             }
+            // Cabeza genérica ("tipo de", "conjunto de", "rama de la"): se salta y se empieza tras el enlace.
+            if (isGeneric(first)) {
+                val nx = if (i + 1 < n) tokens[i + 1] else null
+                if (nx != null && !nx.sentenceStart && links.contains(nx.lower) && adjacent(text, first, nx)) {
+                    var k = i + 2
+                    if (k < n && dets.contains(tokens[k].lower) && adjacent(text, tokens[k - 1], tokens[k])) k++
+                    i = k
+                } else {
+                    i++
+                }
+                continue
+            }
+
             var last = i
-            var words = 1
-            var tech = technicalness(first)
+            var minLen = first.lower.length
+            var maxLen = first.lower.length
+            var content = 1
+            var tech = techInPhrase(first)
             var proper = first.proper
+            var linked = false
             var j = i + 1
-            while (j < n && words < 4) {
+            while (j < n && content < 3) {
                 val cur = tokens[j]
                 val prev = tokens[j - 1]
                 if (cur.sentenceStart || !adjacent(text, prev, cur)) break
-                if (cur.pos == Pos.ADJ || (cur.pos == Pos.NOUN && cur.proper && first.proper)) {
-                    // Sustantivo + adjetivo, o varios nombres propios seguidos.
+                if (cur.pos == Pos.ADJ && !weakAdjectives.contains(cur.lower) && !weakAdjectives.contains(cur.lemma) &&
+                    (!VerbForms.isParticiple(cur.lower) || SpanishTagger.isKnownAdjective(cur.lower))) {
                     last = j
-                    words++
-                    tech += technicalness(cur)
-                    if (cur.proper) proper = true
+                    content++
+                    tech += techInPhrase(cur)
+                    minLen = minOf(minLen, cur.lower.length)
+                    maxLen = maxOf(maxLen, cur.lower.length)
                     j++
                     continue
                 }
-                if (linkWords.contains(cur.lower) || cur.pos == Pos.FUNC && linkWords.contains(cur.lower)) {
+                if (cur.pos == Pos.NOUN && cur.proper && first.proper) {
+                    last = j
+                    content++
+                    j++
+                    continue
+                }
+                if (!linked && links.contains(cur.lower)) {
                     var k = j + 1
-                    if (k < n && linkDeterminers.contains(tokens[k].lower) && adjacent(text, cur, tokens[k])) {
-                        k++
-                    }
-                    if (k < n && tokens[k].pos == Pos.NOUN && !tokens[k].sentenceStart &&
+                    if (k < n && dets.contains(tokens[k].lower) && adjacent(text, cur, tokens[k])) k++
+                    if (k < n && tokens[k].pos == Pos.NOUN && !tokens[k].sentenceStart && !isGeneric(tokens[k]) &&
                         adjacent(text, tokens[k - 1], tokens[k])
                     ) {
                         last = k
-                        words++
-                        tech += technicalness(tokens[k])
+                        content++
+                        minLen = minOf(minLen, tokens[k].lower.length)
+                        maxLen = maxOf(maxLen, tokens[k].lower.length)
+                        linked = true
+                        tech += techInPhrase(tokens[k])
                         if (tokens[k].proper) proper = true
                         j = k + 1
                         continue
@@ -106,66 +202,74 @@ object Terminology {
                 }
                 break
             }
-            if (words >= 2) {
-                val s = tokens[i].start
-                val e = tokens[last].end
-                val display = text.substring(s, e).replace(Regex("\\s+"), " ")
-                candidates.add(Candidate(display.lowercase(), display, s, e, words, tech, proper))
+
+            val s = tokens[i].start
+            val e = tokens[last].end
+            if (content >= 2) {
+                val raw = text.substring(s, e).replace(Regex("\\s+"), " ")
+                val keepCase = proper || tokens.subList(i, last + 1).any { it.acronym }
+                val display = if (keepCase) raw else raw.lowercase()
+                val plausible = termHeads.contains(first.lower) || minLen >= 7 || (maxLen >= 10 && minLen >= 5)
+                cands.add(Cand(raw.lowercase(), display, s, e, content, tech, proper, false, plausible))
             } else {
-                val w = first.lower
-                if (first.acronym || tech >= 1) {
-                    candidates.add(Candidate(w, if (first.acronym) first.text else w, first.start, first.end, 1, tech, first.proper))
-                } else if (first.proper) {
-                    candidates.add(Candidate(w, first.text, first.start, first.end, 1, 0, true))
+                // Palabra suelta: solo siglas, marcas con mayúsculas internas, o palabras de origen técnico.
+                val w = first.text
+                when {
+                    first.acronym -> cands.add(Cand(first.lower, first.text, s, e, 1, 2, true, true))
+                    mixedCase(w) -> cands.add(Cand(first.lower, w, s, e, 1, 2, true, true))
+                    first.proper -> cands.add(Cand(first.lower, w, s, e, 1, 0, true, true))
+                    techSingle(first) >= 1 -> cands.add(Cand(first.lower, first.lower, s, e, 1, techSingle(first), false, true))
                 }
             }
             i = last + 1
         }
 
-        // Adjetivos técnicos sueltos (p. ej. "algorítmico").
-        for (t in tokens) {
-            if (t.pos == Pos.ADJ) {
-                val tech = technicalness(t)
-                if (tech >= 2) {
-                    candidates.add(Candidate(t.lower, t.lower, t.start, t.end, 1, tech, false))
-                }
-            }
+        // Agrupar por clave.
+        class Acc(
+            val display: String, var count: Int, val words: Int, val tech: Int, val proper: Boolean,
+            val single: Boolean, val plausible: Boolean
+        )
+        val acc = LinkedHashMap<String, Acc>()
+        for (c in cands) {
+            val ex = acc[c.key]
+            if (ex == null) acc[c.key] = Acc(c.display, 1, c.words, c.tech, c.proper, c.single, c.plausible) else ex.count += 1
         }
 
-        // Agrupar por clave y puntuar.
-        class Acc(var display: String, var count: Int, val words: Int, val technical: Int, val proper: Boolean)
-        val acc = LinkedHashMap<String, Acc>()
-        val spans = ArrayList<Span>()
-        val total = tokens.size.coerceAtLeast(1)
-        // Se acepta más fácilmente en textos cortos, donde casi nada se repite.
-        for (c in candidates) {
-            val existing = acc[c.key]
-            if (existing == null) {
-                acc[c.key] = Acc(c.display, 1, c.words, c.technical, c.proper)
-            } else {
-                existing.count += 1
-            }
-        }
         val accepted = HashSet<String>()
-        val entries = ArrayList<Entry>()
         for ((key, a) in acc) {
-            val keep = when {
-                a.count >= 2 -> true
-                a.words >= 2 && (a.technical >= 1 || a.proper) -> true
-                a.words >= 2 && total <= 60 -> true
-                a.words == 1 && a.technical >= 2 -> true
-                a.words == 1 && a.technical >= 1 && !a.proper -> true
-                else -> false
+            val keep = if (a.single) {
+                // Los nombres propios sueltos solo cuentan si se repiten; siglas y términos técnicos siempre.
+                a.tech >= 1 || a.count >= 2
+            } else {
+                a.count >= 2 || a.tech >= 1 || a.proper || a.plausible
             }
-            if (!keep) continue
-            accepted.add(key)
-            val score = a.count * 2.0 + (a.words - 1) * 1.5 + a.technical * 2.0
+            if (keep) accepted.add(key)
+        }
+
+        // Una palabra suelta que solo aparece dentro de términos más largos ya aceptados se descarta.
+        val multi = acc.filter { accepted.contains(it.key) && !it.value.single }
+        val finalKeys = ArrayList<String>()
+        for (key in accepted) {
+            val a = acc.getValue(key)
+            if (a.single && !a.proper) {
+                val inside = multi.entries.filter { (k, _) -> k != key && Regex("(^|\\s)" + Regex.escape(key) + "(\\s|$)").containsMatchIn(k) }
+                    .sumOf { it.value.count }
+                if (inside >= a.count) continue
+            }
+            finalKeys.add(key)
+        }
+
+        val entries = ArrayList<Entry>()
+        for (key in finalKeys) {
+            val a = acc.getValue(key)
+            val score = a.count * 2.0 + (a.words - 1) * 1.5 + a.tech * 2.0 + (if (a.proper) 1.0 else 0.0)
             entries.add(Entry(a.display, Category.TERM, a.count, emptyList(), score))
         }
-        for (c in candidates) {
-            if (accepted.contains(c.key)) spans.add(Span(c.start, c.end, Category.TERM))
-        }
         entries.sortWith(compareByDescending<Entry> { it.score }.thenBy { it.lemma.lowercase() })
-        return Pair(entries.take(80), spans)
+        val kept = entries.take(80)
+        val keptKeys = kept.map { it.lemma.lowercase() }.toHashSet()
+        val spans = ArrayList<Span>()
+        for (c in cands) if (c.key in keptKeys) spans.add(Span(c.start, c.end, Category.TERM))
+        return Pair(kept, spans)
     }
 }

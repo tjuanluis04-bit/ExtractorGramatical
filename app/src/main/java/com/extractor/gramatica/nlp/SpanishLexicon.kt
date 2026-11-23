@@ -104,7 +104,7 @@ object SpanishLexicon {
             "ganar gastar lavar limpiar preparar probar:prueb llegar mandar enviar cuidar andar " +
             "amar odiar apoyar actuar adaptar agregar alcanzar almorzar:almuerz aparecer apagar " +
             "arreglar asegurar atender:atiend averiguar bajar buscar celebrar cenar colocar " +
-            "comenzar:comienz compartir completar comprobar:compru concentrar conectar consultar " +
+            "comenzar:comienz compartir completar comprobar:comprueb concentrar conectar consultar " +
             "continuar controlar convertir:conviert cortar costar:cuest cumplir dibujar durar " +
             "elegir:elij emplear encender:enciend entender:entiend escribir explorar extraer " +
             "filtrar fijar funcionar habitar imaginar importar incluir indicar insertar integrar " +
@@ -122,7 +122,7 @@ object SpanishLexicon {
             "aprobar:aprueb asistir bailar beber buscar caer cargar casar cobrar coger comer comparar " +
             "conducir confiar conseguir:consig construir contener contestar crecer criticar dividir " +
             "dudar eliminar entregar escoger esperar establecer evaluar exigir existir expresar " +
-            "faltar ganar gustar impedir:imped informar iniciar interesar investigar juntar " +
+            "faltar ganar gustar impedir:impid informar iniciar interesar investigar juntar " +
             "juzgar ocurrir pegar pretender procurar provocar reunir sembrar:siembr situar " +
             "soñar:sueñ suponer suceder tener tardar tender usar vencer viajar visitar " +
             "recibir leer escribir resumir extraer contar sumar restar dividir multiplicar " +

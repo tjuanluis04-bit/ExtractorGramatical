@@ -30,6 +30,12 @@ class Token(
     var proper: Boolean = false
     var acronym: Boolean = false
 
+    /** Verbo auxiliar ("haber" + participio): se omite de los resultados. */
+    var aux: Boolean = false
+
+    /** Texto (espacios y puntuación) que separa este token del anterior. */
+    var gap: String = ""
+
     /** false cuando el texto está en TÍTULO O MAYÚSCULAS y la mayúscula no indica nombre propio. */
     var allowProper: Boolean = true
 
